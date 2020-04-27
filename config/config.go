@@ -31,6 +31,8 @@ func setConfigDefaults(v *viper.Viper) {
 	v.SetDefault("request_limits.max_size_bytes", 10*1024)
 	v.SetDefault("request_limits.max_num_values", 10)
 	v.SetDefault("request_limits.max_ttl_seconds", 3600)
+	v.SetDefault("cert.public", "tls.crt")
+	v.SetDefault("cert.private", "tls.key")
 }
 
 func setConfigFile(v *viper.Viper) {
@@ -47,14 +49,15 @@ func setEnvVars(v *viper.Viper) {
 }
 
 type Configuration struct {
-	Port          int           `mapstructure:"port"`
-	AdminPort     int           `mapstructure:"admin_port"`
-	Log           Log           `mapstructure:"log"`
-	RateLimiting  RateLimiting  `mapstructure:"rate_limiter"`
-	RequestLimits RequestLimits `mapstructure:"request_limits"`
-	Backend       Backend       `mapstructure:"backend"`
-	Compression   Compression   `mapstructure:"compression"`
-	Metrics       Metrics       `mapstructure:"metrics"`
+	Port          			int           `mapstructure:"port"`
+	AdminPort     			int           `mapstructure:"admin_port"`
+	Log           			Log           `mapstructure:"log"`
+	RateLimiting  			RateLimiting  `mapstructure:"rate_limiter"`
+	RequestLimits 			RequestLimits `mapstructure:"request_limits"`
+	Backend       			Backend       `mapstructure:"backend"`
+	Compression   			Compression   `mapstructure:"compression"`
+	Metrics       			Metrics       `mapstructure:"metrics"`
+	Cert								Cert					`mapstructure:"cert"`
 }
 
 // ValidateAndLog validates the config, terminating the program on any errors.
@@ -68,6 +71,7 @@ func (cfg *Configuration) ValidateAndLog() {
 	cfg.Backend.validateAndLog()
 	cfg.Compression.validateAndLog()
 	cfg.Metrics.validateAndLog()
+	cfg.Cert.validateAndLog()
 }
 
 type Log struct {
@@ -169,4 +173,14 @@ func (cfg *Influx) validateAndLog() {
 	log.Infof("config.metrics.influx.host: %s", cfg.Host)
 	log.Infof("config.metrics.influx.database: %s", cfg.Database)
 	// This intentionally skips username and password for security reasons.
+}
+
+type Cert struct {
+	Public string `mapstructure:"public"`
+	Private string `mapstructure:"private"`
+}
+
+func (cfg *Cert) validateAndLog() {
+	log.Infof("config.cert.public: %s", cfg.Public)
+	log.Infof("config.cert.private: %s", cfg.Private)
 }

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"crypto/tls"
 
 	log "github.com/sirupsen/logrus"
 
@@ -26,12 +27,24 @@ func Listen(cfg config.Configuration, handler http.Handler, metrics *metrics.Con
 	stopMain := make(chan os.Signal)
 	done := make(chan struct{})
 
+	tlsConfig := &tls.Config{
+		MinVersion:               tls.VersionTLS12,
+		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+		PreferServerCipherSuites: true,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+	}
+
 	// Rig up each server so that it listens on a channel for signals. These use different channels for each server
 	// because a shared channel would only alert one consumer (whichever one happens to read it first).
 	//
 	// After a server has finished shutting down, it should send a signal in through the "done" channel.
-	mainServer := newMainServer(cfg, handler)
-	adminServer := newAdminServer(cfg)
+	mainServer := newMainServer(cfg, tlsConfig, handler)
+	adminServer := newAdminServer(cfg, tlsConfig)
 	go shutdownAfterSignals(mainServer, stopMain, done)
 	go shutdownAfterSignals(adminServer, stopAdmin, done)
 
@@ -46,8 +59,8 @@ func Listen(cfg config.Configuration, handler http.Handler, metrics *metrics.Con
 		log.Errorf("Error listening for TCP connections on %s: %v", adminServer.Addr, err)
 		return
 	}
-	go runServer(mainServer, "Main", mainListener)
-	go runServer(adminServer, "Admin", adminListener)
+	go runServer(mainServer, "Main", mainListener, cfg.Cert.Public, cfg.Cert.Private)
+	go runServer(adminServer, "Admin", adminListener, cfg.Cert.Public, cfg.Cert.Private)
 
 	// Then block the thread. When the OS sends a shutdown signal, alert each of the servers.
 	// Once they're finished shutting down (the "done" channel gets pinged for each server),
@@ -56,24 +69,33 @@ func Listen(cfg config.Configuration, handler http.Handler, metrics *metrics.Con
 	return
 }
 
-func newAdminServer(cfg config.Configuration) *http.Server {
+func newAdminServer(cfg config.Configuration, tlsConfig *tls.Config) *http.Server {
 	return &http.Server{
 		Addr: ":" + strconv.Itoa(cfg.AdminPort),
+		TLSConfig:    tlsConfig,
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
 	}
 }
 
-func newMainServer(cfg config.Configuration, handler http.Handler) *http.Server {
+func newMainServer(cfg config.Configuration, tlsConfig *tls.Config, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:         ":" + strconv.Itoa(cfg.Port),
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
+		TLSConfig:    tlsConfig,
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
 	}
 }
 
-func runServer(server *http.Server, name string, listener net.Listener) {
+func runServer(server *http.Server, name string, listener net.Listener, certPublicFileSpec string, certPrivateFileSpec string) {
 	log.Infof("%s server starting on: %s", name, server.Addr)
-	err := server.Serve(listener)
+	var err error
+	if (len(certPublicFileSpec) > 0) && (len(certPrivateFileSpec) > 0) {
+		err = server.ServeTLS(listener, certPublicFileSpec, certPrivateFileSpec)
+	} else {
+		err = server.Serve(listener)
+	}
 	log.Errorf("%s server quit with error: %v", name, err)
 }
 

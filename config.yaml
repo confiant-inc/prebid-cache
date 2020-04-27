@@ -42,3 +42,6 @@ metrics:
     database: "some-database"
     username: "influx-username"
     password: "influx-password"
+cert:
+  public: "confiant.com.cert"
+  private: "confiant.com.key"
