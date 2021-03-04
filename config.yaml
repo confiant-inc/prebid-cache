@@ -43,5 +43,5 @@ metrics:
     username: "influx-username"
     password: "influx-password"
 cert:
-  public: "confiant.com.cert"
-  private: "confiant.com.key"
+  public: "./certs.novcs/confiant.com.cert"
+  private: "./certs.novcs/confiant.com.key"
