@@ -130,6 +130,11 @@ This section does not describe permanent API contracts; it just describes limita
 
 ### Manual testing
 
+First, in the root folder run this scripts:
+```go mod init
+go mod vendor
+```
+
 Run `prebid-cache` locally with:
 
 ```bash
